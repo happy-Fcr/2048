@@ -1,0 +1,26 @@
+# Keil MDK build products and per-user IDE state
+Project/Objects/
+Project/Listings/
+Project/*.uvguix*
+Project/*.uvoptx
+Project/*.build_log*
+Project/*.axf
+Project/*.hex
+Project/*.htm
+Project/*.lnp
+Project/*.sct
+Project/*.dep
+Project/*.Bak
+
+# Accidental Explorer duplicate copies; retain only the canonical project files.
+Project/* (1).*
+
+# Local logs
+*.log
+build_log.txt
+
+# Local validation outputs
+tmp/
+*.o
+*.crf
+*.d

@@ -1,32 +1,18 @@
 #include "lcd_driver.h"
 #include "systick.h"
+#include "gd32f4xx_spi.h"
 
 // ---------- ?? SPI ----------
-#define LCD_SCK_SET()  gpio_bit_set(LCD_SCK_PORT, LCD_SCK_PIN)
-#define LCD_SCK_CLR()  gpio_bit_reset(LCD_SCK_PORT, LCD_SCK_PIN)
-#define LCD_MOSI_SET() gpio_bit_set(LCD_MOSI_PORT, LCD_MOSI_PIN)
-#define LCD_MOSI_CLR() gpio_bit_reset(LCD_MOSI_PORT, LCD_MOSI_PIN)
+#define LCD_SPI_PERIPH SPI4
 
-static void SW_SPI_Write(uint8_t dat)
+static void LCD_SPI_Write(uint8_t data)
 {
-    uint8_t i;
-    volatile uint32_t dummy;
-
-    for (i = 0; i < 8; i++) {
-        if (dat & 0x80) {
-            LCD_MOSI_SET();
-        } else {
-            LCD_MOSI_CLR();
-        }
-
-        LCD_SCK_SET();
-        for (dummy = 0; dummy < 2; dummy++);
-
-        LCD_SCK_CLR();
-        for (dummy = 0; dummy < 2; dummy++);
-
-        dat <<= 1;
+    while (spi_i2s_flag_get(LCD_SPI_PERIPH, SPI_FLAG_TBE) == RESET) {
     }
+    spi_i2s_data_transmit(LCD_SPI_PERIPH, data);
+    while (spi_i2s_flag_get(LCD_SPI_PERIPH, SPI_FLAG_RBNE) == RESET) {
+    }
+    (void)spi_i2s_data_receive(LCD_SPI_PERIPH);
 }
 
 static void LCD_WriteCmd(uint8_t cmd)
@@ -34,7 +20,7 @@ static void LCD_WriteCmd(uint8_t cmd)
     gpio_bit_reset(LCD_DC_PORT, LCD_DC_PIN);
     gpio_bit_reset(LCD_CS_PORT, LCD_CS_PIN);
 
-    SW_SPI_Write(cmd);
+    LCD_SPI_Write(cmd);
 
     gpio_bit_set(LCD_CS_PORT, LCD_CS_PIN);
 }
@@ -44,7 +30,7 @@ static void LCD_WriteData(uint8_t data)
     gpio_bit_set(LCD_DC_PORT, LCD_DC_PIN);
     gpio_bit_reset(LCD_CS_PORT, LCD_CS_PIN);
 
-    SW_SPI_Write(data);
+    LCD_SPI_Write(data);
 
     gpio_bit_set(LCD_CS_PORT, LCD_CS_PIN);
 }
@@ -60,6 +46,7 @@ static void LCD_GPIO_Init(void)
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_GPIOF);
     rcu_periph_clock_enable(RCU_GPIOC);
+    rcu_periph_clock_enable(RCU_SPI4);
 
     gpio_mode_set(LCD_RST_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LCD_RST_PIN);
     gpio_output_options_set(LCD_RST_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LCD_RST_PIN);
@@ -70,18 +57,30 @@ static void LCD_GPIO_Init(void)
     gpio_mode_set(LCD_CS_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LCD_CS_PIN);
     gpio_output_options_set(LCD_CS_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LCD_CS_PIN);
 
-    gpio_mode_set(LCD_SCK_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LCD_SCK_PIN);
-    gpio_output_options_set(LCD_SCK_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LCD_SCK_PIN);
-
-    gpio_mode_set(LCD_MOSI_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LCD_MOSI_PIN);
-    gpio_output_options_set(LCD_MOSI_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LCD_MOSI_PIN);
+    gpio_af_set(LCD_SCK_PORT, GPIO_AF_5, LCD_SCK_PIN | LCD_MOSI_PIN);
+    gpio_mode_set(LCD_SCK_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, LCD_SCK_PIN | LCD_MOSI_PIN);
+    gpio_output_options_set(LCD_SCK_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LCD_SCK_PIN | LCD_MOSI_PIN);
 
     gpio_mode_set(LCD_BL_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LCD_BL_PIN);
     gpio_output_options_set(LCD_BL_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LCD_BL_PIN);
 
     gpio_bit_set(LCD_BL_PORT, LCD_BL_PIN);
-    gpio_bit_reset(LCD_SCK_PORT, LCD_SCK_PIN);
     gpio_bit_set(LCD_CS_PORT, LCD_CS_PIN);
+
+    {
+        spi_parameter_struct spi_initpara;
+        spi_i2s_deinit(LCD_SPI_PERIPH);
+        spi_struct_para_init(&spi_initpara);
+        spi_initpara.device_mode = SPI_MASTER;
+        spi_initpara.trans_mode = SPI_TRANSMODE_FULLDUPLEX;
+        spi_initpara.frame_size = SPI_FRAMESIZE_8BIT;
+        spi_initpara.nss = SPI_NSS_SOFT;
+        spi_initpara.endian = SPI_ENDIAN_MSB;
+        spi_initpara.clock_polarity_phase = SPI_CK_PL_LOW_PH_1EDGE;
+        spi_initpara.prescale = SPI_PSC_2;
+        spi_init(LCD_SPI_PERIPH, &spi_initpara);
+        spi_enable(LCD_SPI_PERIPH);
+    }
 }
 
 static void LCD_Reset(void)
@@ -260,8 +259,8 @@ void LCD_Fill(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color
     gpio_bit_reset(LCD_CS_PORT, LCD_CS_PIN);
 
     for (i = 0; i < total; i++) {
-        SW_SPI_Write(color >> 8);
-        SW_SPI_Write(color & 0xFF);
+        LCD_SPI_Write(color >> 8);
+        LCD_SPI_Write(color & 0xFF);
     }
 
     gpio_bit_set(LCD_CS_PORT, LCD_CS_PIN);

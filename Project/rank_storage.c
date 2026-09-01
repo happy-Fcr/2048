@@ -18,11 +18,21 @@ static uint32_t RankStorage_Checksum(const rank_flash_data_t *data)
     uint8_t i;
     uint32_t checksum = data->magic ^ data->version;
 
-    for (i = 0; i < RANK_COUNT; i++) {
-        checksum ^= data->scores[i];
-    }
-
+    for (i = 0U; i < RANK_COUNT; i++) checksum ^= data->scores[i];
     return checksum;
+}
+
+static uint8_t RankStorage_IsValid(const rank_flash_data_t *data)
+{
+    uint8_t i;
+
+    if (data->magic != RANK_MAGIC || data->version != RANK_VERSION ||
+        data->checksum != RankStorage_Checksum(data)) return 0U;
+
+    for (i = 1U; i < RANK_COUNT; i++) {
+        if (data->scores[i - 1U] < data->scores[i]) return 0U;
+    }
+    return 1U;
 }
 
 void RankStorage_Load(uint32_t scores[RANK_COUNT])
@@ -32,42 +42,28 @@ void RankStorage_Load(uint32_t scores[RANK_COUNT])
 
     if (scores == 0) return;
 
-    if (data->magic == RANK_MAGIC &&
-        data->version == RANK_VERSION &&
-        data->checksum == RankStorage_Checksum(data) &&
-        data->scores[0] >= data->scores[1] &&
-        data->scores[1] >= data->scores[2] &&
-        data->scores[2] >= data->scores[3] &&
-        data->scores[3] >= data->scores[4] &&
-        data->scores[4] >= data->scores[5] &&
-        data->scores[5] >= data->scores[6] &&
-        data->scores[6] >= data->scores[7] &&
-        data->scores[7] >= data->scores[8] &&
-        data->scores[8] >= data->scores[9]) {
-        for (i = 0; i < RANK_COUNT; i++) {
-            scores[i] = data->scores[i];
-        }
+    if (RankStorage_IsValid(data) != 0U) {
+        for (i = 0U; i < RANK_COUNT; i++) scores[i] = data->scores[i];
     } else {
-        for (i = 0; i < RANK_COUNT; i++) {
-            scores[i] = 0;
-        }
+        for (i = 0U; i < RANK_COUNT; i++) scores[i] = 0U;
     }
 }
 
-void RankStorage_Save(const uint32_t scores[RANK_COUNT])
+uint8_t RankStorage_Save(const uint32_t scores[RANK_COUNT])
 {
     uint8_t i;
+    uint8_t verify_index;
+    uint8_t success = 0U;
     uint32_t address = RANK_FLASH_ADDR;
     rank_flash_data_t data;
+    const rank_flash_data_t *verify = (const rank_flash_data_t *)RANK_FLASH_ADDR;
     const uint32_t *words = (const uint32_t *)&data;
 
-    if (scores == 0) return;
+    if (scores == 0) return 0U;
 
     data.magic = RANK_MAGIC;
     data.version = RANK_VERSION;
-    for (i = 0; i < RANK_COUNT; i++) {
-        data.scores[i] = scores[i];
-    }
+    for (i = 0U; i < RANK_COUNT; i++) data.scores[i] = scores[i];
     data.checksum = RankStorage_Checksum(&data);
 
     fmc_unlock();
@@ -75,13 +71,22 @@ void RankStorage_Save(const uint32_t scores[RANK_COUNT])
                    FMC_FLAG_PGMERR | FMC_FLAG_PGSERR | FMC_FLAG_RDDERR);
 
     if (fmc_page_erase(RANK_FLASH_ADDR) == FMC_READY) {
-        for (i = 0; i < sizeof(rank_flash_data_t) / sizeof(uint32_t); i++) {
-            if (fmc_word_program(address, words[i]) != FMC_READY) {
-                break;
-            }
+        for (i = 0U; i < sizeof(rank_flash_data_t) / sizeof(uint32_t); i++) {
+            if (fmc_word_program(address, words[i]) != FMC_READY) break;
             address += 4U;
+        }
+        if (i == sizeof(rank_flash_data_t) / sizeof(uint32_t) &&
+            RankStorage_IsValid(verify) != 0U) {
+            success = 1U;
+            for (verify_index = 0U; verify_index < RANK_COUNT; verify_index++) {
+                if (verify->scores[verify_index] != scores[verify_index]) {
+                    success = 0U;
+                    break;
+                }
+            }
         }
     }
 
     fmc_lock();
+    return success;
 }

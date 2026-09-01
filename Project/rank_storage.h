@@ -3,9 +3,9 @@
 
 #include <stdint.h>
 
-#define RANK_COUNT 10
+#define RANK_COUNT 10U
 
 void RankStorage_Load(uint32_t scores[RANK_COUNT]);
-void RankStorage_Save(const uint32_t scores[RANK_COUNT]);
+uint8_t RankStorage_Save(const uint32_t scores[RANK_COUNT]);
 
 #endif
