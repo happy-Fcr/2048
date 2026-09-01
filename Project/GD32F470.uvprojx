@@ -410,6 +410,11 @@
               <FileType>1</FileType>
               <FilePath>.\game2048.c</FilePath>
             </File>
+              <File>
+                <FileName>game2048_core.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>.\game2048_core.c</FilePath>
+              </File>
             <File>
               <FileName>game2048.h</FileName>
               <FileType>5</FileType>

@@ -25,6 +25,7 @@ static uint8_t volume_level = 3;
 static uint8_t language = UI_LANG_ENGLISH;
 static uint32_t rank_score[RANK_COUNT] = {0};
 static uint8_t random_seeded = 0;
+static uint8_t game_score_saved = 0;
 
 static void button_init(void)
 {
@@ -104,6 +105,15 @@ static uint8_t Rank_Add(uint32_t s)
     return 0;
 }
 
+static void SaveCurrentGameScore(void)
+{
+    if (game_score_saved != 0U) return;
+
+    if (Rank_Add(Game_GetScore()) != 0U) {
+        (void)RankStorage_Save(rank_score);
+    }
+    game_score_saved = 1U;
+}
 static void Draw_StartMenu(void)
 {
     LCD_Fill(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, BLACK);
@@ -192,7 +202,7 @@ static void Draw_End(uint8_t is_win)
         LCD_ShowUInt32(125, 90, Game_GetScore(), WHITE, BLACK);
         LCD_ShowString(45, 125, "DIFF:", WHITE, BLACK);
         LCD_ShowString(105, 125, DiffName(Game_GetDifficulty()), WHITE, BLACK);
-        LCD_ShowString(18, 190, "RIGHT RESTART", WHITE, BLACK);
+        LCD_ShowString(18, 190, is_win ? "RIGHT CONTINUE" : "RIGHT RESTART", WHITE, BLACK);
         LCD_ShowString(18, 215, "LEFT MENU", WHITE, BLACK);
     }
 }
@@ -208,6 +218,7 @@ static void Start_NewGame(void)
     }
 
     Game_SetDifficulty(diff_index);
+    game_score_saved = 0U;
     Game_Init();
     Game_ShowBoard();
     Sound_StartMusic();
@@ -362,16 +373,11 @@ int main(void)
                 if (Game_Move(key)) {
                     Game_ShowBoard();
                     if (Game_IsWin()) {
-                        if (Rank_Add(Game_GetScore())) {
-                            RankStorage_Save(rank_score);
-                        }
                         Sound_PlayWin();
                         ui_state = UI_WIN;
                         Draw_End(1);
                     } else if (Game_IsLose()) {
-                        if (Rank_Add(Game_GetScore())) {
-                            RankStorage_Save(rank_score);
-                        }
+                        SaveCurrentGameScore();
                         Sound_PlayGameOver();
                         ui_state = UI_OVER;
                         Draw_End(0);
@@ -380,8 +386,16 @@ int main(void)
             }
         } else if (ui_state == UI_OVER || ui_state == UI_WIN) {
             if (key == KEY_RIGHT) {
-                Start_NewGame();
+                if (ui_state == UI_WIN) {
+                    Game_ContinueAfterWin();
+                    Game_ShowBoard();
+                    Sound_StartMusic();
+                    ui_state = UI_GAME;
+                } else {
+                    Start_NewGame();
+                }
             } else if (key == KEY_LEFT) {
+                if (ui_state == UI_WIN) SaveCurrentGameScore();
                 ui_state = UI_START;
                 Draw_StartMenu();
             }

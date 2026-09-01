@@ -12,13 +12,10 @@
 #define KEY_RIGHT_PORT  GPIOB
 #define KEY_RIGHT_PIN   GPIO_PIN_2
 
-#define KEY_NONE    0
-#define KEY_UP      1
-#define KEY_DOWN    2
-#define KEY_LEFT    3
-#define KEY_RIGHT   4
+#define KEY_NONE  0U
+#define KEY_UP    1U
+#define KEY_DOWN  2U
+#define KEY_LEFT  3U
+#define KEY_RIGHT 4U
 
-void KEY_Init(void);
-uint8_t KEY_GetPressed(void);
-
-#endif
+#endif /* __KEY_H */
